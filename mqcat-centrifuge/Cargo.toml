@@ -1,0 +1,21 @@
+[package]
+name = "mqcat-centrifuge"
+version = "0.1.0"
+license = "MIT"
+edition = "2024"
+rust-version = "1.85.0"
+
+[[bin]]
+name = "mqcat-cf"
+path = "src/main.rs"
+
+[dependencies]
+mqcat-commons = { path = "../mqcat-commons" }
+
+clap = { version = "4.5.39", features = ["derive"] }
+log = "0.4.27"
+tokio = { version = "1.45.1", features = ["macros", "net", "process", "rt", "rt-multi-thread", "time"] }
+
+[lints.clippy]
+len_zero = "allow"
+uninlined_format_args = "allow"

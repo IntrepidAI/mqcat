@@ -1,0 +1,9 @@
+[workspace]
+members = [
+    "mqcat-centrifuge",
+    "mqcat-commons",
+]
+resolver = "3"
+
+[profile.release]
+strip = "symbols"
