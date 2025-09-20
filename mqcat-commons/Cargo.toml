@@ -6,11 +6,16 @@ edition = "2024"
 rust-version = "1.85.0"
 
 [dependencies]
-clap = { version = "4.5.40", features = ["derive"] }
-ctrlc = { version = "3.4.7", features = ["termination"] }
-log = "0.4.27"
-tokio = { version = "1.45.1", features = ["net", "sync"] }
-tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+# external crates
+ctrlc = { version = "3.5.0", features = ["termination"] }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+
+# workspace dependencies
+anyhow = { workspace = true }
+clap = { workspace = true }
+futures-util = { workspace = true }
+log = { workspace = true }
+tokio = { workspace = true }
 
 [build-dependencies]
 vergen-gitcl = { version = "1.0.8", features = ["build", "cargo", "rustc"] }

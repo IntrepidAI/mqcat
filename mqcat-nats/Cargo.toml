@@ -1,19 +1,19 @@
 [package]
-name = "mqcat-centrifuge"
+name = "mqcat-nats"
 version = "0.1.0"
 license = "MIT"
 edition = "2024"
 rust-version = "1.85.0"
 
 [[bin]]
-name = "mqcat-cf"
+name = "mqcat-nats"
 path = "src/main.rs"
 
 [dependencies]
 mqcat-commons = { path = "../mqcat-commons" }
 
 # external crates
-tokio-centrifuge = { version = "0.2.4", default-features = false, features = ["native-tls"] }
+async-nats = "0.42.0"
 
 # workspace dependencies
 anyhow = { workspace = true }

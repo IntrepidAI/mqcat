@@ -1,20 +1,24 @@
-#![allow(clippy::uninlined_format_args)]
+use std::io::Write;
+use std::pin::pin;
 
+use clap::Parser;
 use clap::builder::Styles;
 use clap::builder::styling::AnsiColor;
-use clap::{Args, Parser};
+use futures_util::StreamExt;
 use tokio::sync::mpsc::error::TrySendError;
 use tracing_subscriber::filter;
 use tracing_subscriber::prelude::*;
+
+use crate::mqtrait::MessageQueue;
 
 #[derive(Parser, Debug)]
 #[command(disable_help_subcommand = true)]
 #[command(disable_help_flag = true)]
 #[command(disable_version_flag = true)]
 #[command(styles = get_styles())]
-pub struct Arguments<T: Args> {
-    #[clap(flatten)]
-    pub args: T,
+pub struct BaseArgs/*<T: Args>*/ {
+    // #[clap(flatten)]
+    // pub args: T,
     #[arg(global = true, short, long, help = "increase logging verbosity", action = clap::ArgAction::Count, conflicts_with = "quiet")]
     verbose: u8,
     #[arg(global = true, short, long, help = "decrease logging verbosity", action = clap::ArgAction::Count, conflicts_with = "verbose")]
@@ -23,6 +27,25 @@ pub struct Arguments<T: Args> {
     help: Option<bool>,
     #[arg(short = 'V', long, help = "print version and build info")]
     version: bool,
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Parser, Debug)]
+enum Commands {
+    #[command(about = "publish a message to a channel", alias = "pub")]
+    Publish {
+        #[arg(help = "channel name")]
+        channel: String,
+        #[arg(help = "data to publish")]
+        data: String,
+    },
+
+    #[command(about = "subscribe to a channel", alias = "sub")]
+    Subscribe {
+        #[arg(help = "channel name")]
+        channel: String,
+    },
 }
 
 fn get_styles() -> Styles {
@@ -35,7 +58,7 @@ fn get_styles() -> Styles {
         .placeholder(AnsiColor::Green.on_default())
 }
 
-pub async fn init<T: Args>(run_app: impl AsyncFnOnce(T)) {
+pub async fn init(run_app: impl AsyncFnOnce(BaseArgs) -> anyhow::Result<()>) {
     // set it up so:
     //  - ctrl-c stops polling current async task
     //  - double ctrl-c stops the process
@@ -70,7 +93,7 @@ pub async fn init<T: Args>(run_app: impl AsyncFnOnce(T)) {
         abort_recv
     };
 
-    let args = Arguments::<T>::parse();
+    let args = BaseArgs::parse();
 
     // set verbosity level, default is info
     let filter_layer = filter::EnvFilter::builder()
@@ -96,6 +119,45 @@ pub async fn init<T: Args>(run_app: impl AsyncFnOnce(T)) {
     // run app, abort on ctrl-c
     tokio::select! {
         _ = abort_recv.recv() => {}
-        _ = run_app(args.args) => {}
+        result = run_app(args) => {
+            if let Err(e) = result {
+                log::error!("{}", e);
+                std::process::exit(1);
+            }
+        }
     }
+}
+
+pub async fn run<Q: MessageQueue>() {
+    init(|args: BaseArgs| async {
+        match args.command {
+            Some(Commands::Publish { channel, data }) => {
+                let mq = Q::connect().await?;
+                mq.publish(&channel, data.as_bytes()).await?;
+                log::info!("published {} bytes to \"{}\"", data.len(), channel);
+            }
+            Some(Commands::Subscribe { channel }) => {
+                let mut idx = 0;
+                let mq = Q::connect().await?;
+                let stream = mq.subscribe(&channel);
+                let mut stream = pin!(stream);
+                while let Some(msg) = stream.next().await {
+                    let (channel, data) = msg?;
+                    idx += 1;
+                    std::io::stdout().write_all(
+                        format!("[#{idx}] Received on \"{}\"\n", channel).as_bytes()
+                    )?;
+                    std::io::stdout().write_all(&data)?;
+                    std::io::stdout().write_all(b"\n\n\n")?;
+                    std::io::stdout().flush()?;
+                }
+            }
+            None => {
+                use clap::CommandFactory;
+                let _ = BaseArgs::command().print_help();
+            }
+        }
+
+        Ok(())
+    }).await;
 }
