@@ -33,6 +33,15 @@ impl MessageQueue for NatsMQ {
             }
         }
     }
+
+    async fn request(&self, topic: &str, payload: &[u8]) -> anyhow::Result<Vec<u8>> {
+        if topic.is_empty() {
+            bail!("subject is empty");
+        }
+        let res = self.client.request(topic.to_owned(), payload.to_vec().into()).await
+            .map_err(|err| anyhow!("failed to request: {}", err))?;
+        Ok(res.payload.into())
+    }
 }
 
 #[tokio::main]

@@ -46,6 +46,14 @@ enum Commands {
         #[arg(help = "channel name")]
         channel: String,
     },
+
+    #[command(about = "request a message from a channel", alias = "req")]
+    Request {
+        #[arg(help = "channel name")]
+        channel: String,
+        #[arg(help = "request data")]
+        data: String,
+    },
 }
 
 fn get_styles() -> Styles {
@@ -145,12 +153,24 @@ pub async fn run<Q: MessageQueue>() {
                     let (channel, data) = msg?;
                     idx += 1;
                     std::io::stdout().write_all(
-                        format!("[#{idx}] Received on \"{}\"\n", channel).as_bytes()
+                        format!("[#{idx}] Received on \"{}\" ({} bytes)\n", channel, data.len()).as_bytes()
                     )?;
-                    std::io::stdout().write_all(&data)?;
+                    let data = String::from_utf8_lossy(&data);
+                    std::io::stdout().write_all(data.as_bytes())?;
                     std::io::stdout().write_all(b"\n\n\n")?;
                     std::io::stdout().flush()?;
                 }
+            }
+            Some(Commands::Request { channel, data }) => {
+                let mq = Q::connect().await?;
+                log::info!("sending request to \"{}\"", channel);
+                let data = mq.request(&channel, data.as_bytes()).await?;
+                std::io::stdout().write_all(
+                    format!("[#0] Received on \"{}\" ({} bytes)\n", channel, data.len()).as_bytes()
+                )?;
+                std::io::stdout().write_all(&data)?;
+                std::io::stdout().write_all(b"\n\n\n")?;
+                std::io::stdout().flush()?;
             }
             None => {
                 use clap::CommandFactory;

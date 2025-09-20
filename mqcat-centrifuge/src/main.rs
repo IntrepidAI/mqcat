@@ -34,7 +34,8 @@ impl MessageQueue for CentrifugeMQ {
     }
 
     async fn publish(&self, topic: &str, payload: &[u8]) -> anyhow::Result<()> {
-        self.client.publish(topic, payload.to_vec()).await.map_err(|err| anyhow!("failed to publish: {}", err))?;
+        self.client.publish(topic, payload.to_vec()).await
+            .map_err(|err| anyhow!("failed to publish: {}", err))?;
         Ok(())
     }
 
@@ -77,6 +78,12 @@ impl MessageQueue for CentrifugeMQ {
                 }
             }?;
         }
+    }
+
+    async fn request(&self, topic: &str, payload: &[u8]) -> anyhow::Result<Vec<u8>> {
+        let res = self.client.rpc(topic, payload.to_vec()).await
+            .map_err(|err| anyhow!("failed to execute rpc: {}", err))?;
+        Ok(res)
     }
 }
 

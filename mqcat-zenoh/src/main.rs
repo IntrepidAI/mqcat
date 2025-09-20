@@ -4,6 +4,7 @@ use anyhow::anyhow;
 use futures_util::Stream;
 use mqcat_commons::mqtrait::MessageQueue;
 use zenoh::Session;
+use zenoh::query::QueryTarget;
 
 struct ZenohMQ {
     client: Session,
@@ -19,7 +20,7 @@ impl MessageQueue for ZenohMQ {
     async fn connect() -> anyhow::Result<Self> {
         let mut config = zenoh::Config::default();
         config
-            .insert_json5("connect/endpoints", &serde_json::json!(["tcp/172.17.183.14:7447"]).to_string())
+            .insert_json5("connect/endpoints", &serde_json::json!(["tcp/172.25.142.82:7558"]).to_string())
             .unwrap();
 
         let zenoh = zenoh::open(config).await
@@ -46,6 +47,19 @@ impl MessageQueue for ZenohMQ {
                 yield (sample.key_expr().to_string(), sample.payload().to_bytes().to_vec());
             }
         }
+    }
+
+    async fn request(&self, topic: &str, payload: &[u8]) -> anyhow::Result<Vec<u8>> {
+        let querier = self.client.declare_querier(topic.to_owned())
+            .target(QueryTarget::BestMatching)
+            .await
+            .map_err(|err| anyhow!("declare failed: {}", err))?;
+        let replies = querier.get().payload(payload.to_vec()).await
+            .map_err(|err| anyhow!("query failed: {}", err))?;
+        let reply = replies.recv_async().await
+            .map_err(|err| anyhow!("recv failed: {}", err))?;
+        let result = reply.result().map_err(|err| anyhow!("result failed: {}", err))?;
+        Ok(result.payload().to_bytes().to_vec())
     }
 }
 
