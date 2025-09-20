@@ -56,7 +56,7 @@ impl MessageQueue for CentrifugeMQ {
             log::debug!("subscribing to {} (code={}, reason={})", e.channel, e.code, e.reason);
         });
         sub.on_publication(move |data| {
-            if let Err(err) = recv_tx.try_send(data.data) {
+            if let Err(err) = recv_tx.try_send((data.channel, data.data)) {
                 let _ = unsub_tx.try_send((0, format!("{}", err)));
             }
         });
@@ -66,8 +66,11 @@ impl MessageQueue for CentrifugeMQ {
         async_stream::try_stream! {
             loop {
                 tokio::select! {
-                    Some(data) = recv_rx.recv() => {
-                        yield (topic.to_owned(), data);
+                    Some((mut channel, data)) = recv_rx.recv() => {
+                        if channel.is_empty() {
+                            channel = topic.to_owned();
+                        }
+                        yield (channel, data);
                     }
                     Some((code, reason)) = unsub_rx.recv() => {
                         break Err(anyhow!("subscription failed: {} {}", code, reason));

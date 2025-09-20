@@ -13,7 +13,7 @@ path = "src/main.rs"
 mqcat-commons = { path = "../mqcat-commons" }
 
 # external crates
-tokio-centrifuge = { version = "0.2.4", default-features = false, features = ["native-tls"] }
+tokio-centrifuge = { version = "0.2.5", default-features = false, features = ["native-tls"] }
 
 # workspace dependencies
 anyhow = { workspace = true }

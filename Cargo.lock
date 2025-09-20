@@ -3246,9 +3246,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-centrifuge"
-version = "0.2.4"
+version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88158d8789c83a1ce5a7a32516b475530e72ad54aa5effbc2066eddecc87d1b2"
+checksum = "199d1f92b5049c9698308a01c67cd98f403d4dc7e1e1a2f98ffab149590b0c76"
 dependencies = [
  "anyhow",
  "futures-util",
