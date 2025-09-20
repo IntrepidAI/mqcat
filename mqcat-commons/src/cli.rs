@@ -1,5 +1,6 @@
 use std::io::Write;
 use std::pin::pin;
+use std::time::Duration;
 
 use clap::Parser;
 use clap::builder::Styles;
@@ -39,6 +40,10 @@ enum Commands {
         channel: String,
         #[arg(help = "data to publish")]
         data: String,
+        #[arg(long, help = "publish multiple messages", default_value = "1")]
+        count: u32,
+        #[arg(long, help = "sleep between messages", default_value = "0", value_parser = parse_duration)]
+        sleep: Duration,
     },
 
     #[command(about = "subscribe to a channel", alias = "sub")]
@@ -53,7 +58,20 @@ enum Commands {
         channel: String,
         #[arg(help = "request data")]
         data: String,
+        #[arg(long, help = "publish multiple messages", default_value = "1")]
+        count: u32,
+        #[arg(long, help = "sleep between messages", default_value = "0", value_parser = parse_duration)]
+        sleep: Duration,
     },
+}
+
+fn parse_duration(s: &str) -> Result<Duration, String> {
+    let duration = go_parse_duration::parse_duration(s)
+        .map_err(|go_parse_duration::Error::ParseError(e)| e)?;
+    if duration < 0 {
+        return Err("duration must be positive".to_string());
+    }
+    Ok(Duration::from_nanos(duration as u64))
 }
 
 fn get_styles() -> Styles {
@@ -139,10 +157,15 @@ pub async fn init(run_app: impl AsyncFnOnce(BaseArgs) -> anyhow::Result<()>) {
 pub async fn run<Q: MessageQueue>() {
     init(|args: BaseArgs| async {
         match args.command {
-            Some(Commands::Publish { channel, data }) => {
+            Some(Commands::Publish { channel, data, count, sleep }) => {
                 let mq = Q::connect().await?;
-                mq.publish(&channel, data.as_bytes()).await?;
-                log::info!("published {} bytes to \"{}\"", data.len(), channel);
+                for n in 0..count {
+                    if n > 0 {
+                        tokio::time::sleep(sleep).await;
+                    }
+                    mq.publish(&channel, data.as_bytes()).await?;
+                    log::info!("published {} bytes to \"{}\"", data.len(), channel);
+                }
             }
             Some(Commands::Subscribe { channel }) => {
                 let mut idx = 0;
@@ -161,16 +184,21 @@ pub async fn run<Q: MessageQueue>() {
                     std::io::stdout().flush()?;
                 }
             }
-            Some(Commands::Request { channel, data }) => {
+            Some(Commands::Request { channel, data, count, sleep }) => {
                 let mq = Q::connect().await?;
-                log::info!("sending request to \"{}\"", channel);
-                let data = mq.request(&channel, data.as_bytes()).await?;
-                std::io::stdout().write_all(
-                    format!("[#0] Received on \"{}\" ({} bytes)\n", channel, data.len()).as_bytes()
-                )?;
-                std::io::stdout().write_all(&data)?;
-                std::io::stdout().write_all(b"\n\n\n")?;
-                std::io::stdout().flush()?;
+                for n in 0..count {
+                    if n > 0 {
+                        tokio::time::sleep(sleep).await;
+                    }
+                    log::info!("sending request to \"{}\"", channel);
+                    let data = mq.request(&channel, data.as_bytes()).await?;
+                    std::io::stdout().write_all(
+                        format!("[#0] Received on \"{}\" ({} bytes)\n", channel, data.len()).as_bytes()
+                    )?;
+                    std::io::stdout().write_all(&data)?;
+                    std::io::stdout().write_all(b"\n\n\n")?;
+                    std::io::stdout().flush()?;
+                }
             }
             None => {
                 use clap::CommandFactory;

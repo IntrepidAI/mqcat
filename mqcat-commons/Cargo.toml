@@ -8,6 +8,7 @@ rust-version = "1.85.0"
 [dependencies]
 # external crates
 ctrlc = { version = "3.5.0", features = ["termination"] }
+go-parse-duration = "0.1.1"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 
 # workspace dependencies
