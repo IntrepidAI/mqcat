@@ -17,10 +17,11 @@ impl Drop for ZenohMQ {
 }
 
 impl MessageQueue for ZenohMQ {
-    async fn connect() -> anyhow::Result<Self> {
+    async fn connect(addr: &str) -> anyhow::Result<Self> {
         let mut config = zenoh::Config::default();
         config
-            .insert_json5("connect/endpoints", &serde_json::json!(["tcp/172.25.142.82:7558"]).to_string())
+            .insert_json5("connect/endpoints", &serde_json::json!([addr]).to_string())
+            // .insert_json5("connect/endpoints", &serde_json::json!(["tcp/172.25.142.82:7558", addr]).to_string())
             .unwrap();
 
         let zenoh = zenoh::open(config).await

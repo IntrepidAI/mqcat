@@ -9,9 +9,10 @@ struct CentrifugeMQ {
 }
 
 impl MessageQueue for CentrifugeMQ {
-    async fn connect() -> anyhow::Result<Self> {
+    async fn connect(addr: &str) -> anyhow::Result<Self> {
         let client = Client::new(
-            "ws://localhost:18120/connection/websocket?format=protobuf",
+            addr,
+            // "ws://localhost:18120/connection/websocket?format=protobuf",
             Config::new().use_json()
         );
 

@@ -28,6 +28,8 @@ pub struct BaseArgs/*<T: Args>*/ {
     help: Option<bool>,
     #[arg(short = 'V', long, help = "print version and build info")]
     version: bool,
+    #[arg(help = "server address")]
+    url: String,
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -60,8 +62,6 @@ enum Commands {
         data: String,
         #[arg(long, help = "publish multiple messages", default_value = "1")]
         count: u32,
-        #[arg(long, help = "sleep between messages", default_value = "0", value_parser = parse_duration)]
-        sleep: Duration,
     },
 }
 
@@ -155,10 +155,10 @@ pub async fn init(run_app: impl AsyncFnOnce(BaseArgs) -> anyhow::Result<()>) {
 }
 
 pub async fn run<Q: MessageQueue>() {
-    init(|args: BaseArgs| async {
+    init(|args: BaseArgs| async move {
         match args.command {
             Some(Commands::Publish { channel, data, count, sleep }) => {
-                let mq = Q::connect().await?;
+                let mq = Q::connect(&args.url).await?;
                 for n in 0..count {
                     if n > 0 {
                         tokio::time::sleep(sleep).await;
@@ -169,7 +169,7 @@ pub async fn run<Q: MessageQueue>() {
             }
             Some(Commands::Subscribe { channel }) => {
                 let mut idx = 0;
-                let mq = Q::connect().await?;
+                let mq = Q::connect(&args.url).await?;
                 let stream = mq.subscribe(&channel);
                 let mut stream = pin!(stream);
                 while let Some(msg) = stream.next().await {
@@ -184,16 +184,17 @@ pub async fn run<Q: MessageQueue>() {
                     std::io::stdout().flush()?;
                 }
             }
-            Some(Commands::Request { channel, data, count, sleep }) => {
-                let mq = Q::connect().await?;
-                for n in 0..count {
-                    if n > 0 {
-                        tokio::time::sleep(sleep).await;
-                    }
+            Some(Commands::Request { channel, data, count }) => {
+                let mq = Q::connect(&args.url).await?;
+                let mut idx = 0;
+                for _ in 0..count {
                     log::info!("sending request to \"{}\"", channel);
+                    let time = std::time::Instant::now();
                     let data = mq.request(&channel, data.as_bytes()).await?;
+                    log::info!("received with rtt {:?}", time.elapsed());
+                    idx += 1;
                     std::io::stdout().write_all(
-                        format!("[#0] Received on \"{}\" ({} bytes)\n", channel, data.len()).as_bytes()
+                        format!("[#{idx}] Received on \"{}\" ({} bytes)\n", channel, data.len()).as_bytes()
                     )?;
                     std::io::stdout().write_all(&data)?;
                     std::io::stdout().write_all(b"\n\n\n")?;

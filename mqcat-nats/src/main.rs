@@ -8,8 +8,9 @@ struct NatsMQ {
 }
 
 impl MessageQueue for NatsMQ {
-    async fn connect() -> anyhow::Result<Self> {
-        let client = async_nats::connect("nats://172.17.183.14:4222").await?;
+    async fn connect(addr: &str) -> anyhow::Result<Self> {
+        // "nats://172.25.142.82:4222"
+        let client = async_nats::connect(addr).await?;
         Ok(Self { client })
     }
 
