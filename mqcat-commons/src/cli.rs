@@ -1,11 +1,14 @@
+use std::borrow::Cow;
 use std::io::Write;
 use std::pin::pin;
 use std::time::Duration;
 
+use anyhow::Context;
 use clap::Parser;
 use clap::builder::Styles;
 use clap::builder::styling::AnsiColor;
 use futures_util::StreamExt;
+use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::error::TrySendError;
 use tracing_subscriber::filter;
 use tracing_subscriber::prelude::*;
@@ -52,6 +55,8 @@ enum Commands {
     Subscribe {
         #[arg(help = "channel name")]
         channel: String,
+        #[arg(long, help = "decode the message by passing it through a given command")]
+        translate: Option<String>,
     },
 
     #[command(about = "request a message from a channel", alias = "req")]
@@ -62,6 +67,8 @@ enum Commands {
         data: String,
         #[arg(long, help = "publish multiple messages", default_value = "1")]
         count: u32,
+        #[arg(long, help = "decode the message by passing it through a given command")]
+        translate: Option<String>,
     },
 }
 
@@ -154,6 +161,60 @@ pub async fn init(run_app: impl AsyncFnOnce(BaseArgs) -> anyhow::Result<()>) {
     }
 }
 
+async fn translate_data(data: &[u8], translate: &str) -> anyhow::Result<Vec<u8>> {
+    let (arg0, args) = {
+        let mut args = shlex::split(translate).context("invalid translate command")?;
+        let arg0 = if args.is_empty() {
+            String::new()
+        } else {
+            args.remove(0)
+        };
+        (arg0, args)
+    };
+
+    let mut process = tokio::process::Command::new(&arg0)
+        .args(&args)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+
+    let mut stdin = process.stdin.take().context("failed to get stdin")?;
+    stdin.write_all(data).await?;
+    drop(stdin);
+
+    let result = process.wait_with_output().await?;
+    for line in String::from_utf8_lossy(&result.stderr).lines() {
+        log::warn!("translate stderr: {}", line);
+    }
+    if !result.status.success() {
+        anyhow::bail!("translate failed with exit code {}", result.status);
+    }
+    Ok(result.stdout)
+}
+
+async fn print_data(idx: u32, channel: &str, data: &[u8], translate: &Option<String>) -> anyhow::Result<()> {
+    std::io::stdout().write_all(
+        format!("[#{idx}] Received on \"{}\" ({} bytes)\n", channel, data.len()).as_bytes()
+    )?;
+
+    let mut data = Cow::Borrowed(data);
+    if let Some(translate) = translate {
+        data = Cow::Owned(translate_data(&data, translate).await?);
+    }
+
+    // make sure that terminal output is valid utf-8 (otherwise terminal may crash),
+    // user should use --raw to override this
+    let data = String::from_utf8_lossy(&data);
+    std::io::stdout().write_all(data.as_bytes())?;
+    if !data.ends_with(['\n', '\r']) {
+        std::io::stdout().write_all(b"\n")?;
+    }
+    std::io::stdout().write_all(b"\n\n")?;
+    std::io::stdout().flush()?;
+    Ok(())
+}
+
 pub async fn run<Q: MessageQueue>() {
     init(|args: BaseArgs| async move {
         match args.command {
@@ -167,7 +228,7 @@ pub async fn run<Q: MessageQueue>() {
                     log::info!("published {} bytes to \"{}\"", data.len(), channel);
                 }
             }
-            Some(Commands::Subscribe { channel }) => {
+            Some(Commands::Subscribe { channel, translate }) => {
                 let mut idx = 0;
                 let mq = Q::connect(&args.url).await?;
                 let stream = mq.subscribe(&channel);
@@ -175,16 +236,10 @@ pub async fn run<Q: MessageQueue>() {
                 while let Some(msg) = stream.next().await {
                     let (channel, data) = msg?;
                     idx += 1;
-                    std::io::stdout().write_all(
-                        format!("[#{idx}] Received on \"{}\" ({} bytes)\n", channel, data.len()).as_bytes()
-                    )?;
-                    let data = String::from_utf8_lossy(&data);
-                    std::io::stdout().write_all(data.as_bytes())?;
-                    std::io::stdout().write_all(b"\n\n\n")?;
-                    std::io::stdout().flush()?;
+                    print_data(idx, &channel, &data, &translate).await?;
                 }
             }
-            Some(Commands::Request { channel, data, count }) => {
+            Some(Commands::Request { channel, data, count, translate }) => {
                 let mq = Q::connect(&args.url).await?;
                 let mut idx = 0;
                 for _ in 0..count {
@@ -193,12 +248,7 @@ pub async fn run<Q: MessageQueue>() {
                     let data = mq.request(&channel, data.as_bytes()).await?;
                     log::info!("received with rtt {:?}", time.elapsed());
                     idx += 1;
-                    std::io::stdout().write_all(
-                        format!("[#{idx}] Received on \"{}\" ({} bytes)\n", channel, data.len()).as_bytes()
-                    )?;
-                    std::io::stdout().write_all(&data)?;
-                    std::io::stdout().write_all(b"\n\n\n")?;
-                    std::io::stdout().flush()?;
+                    print_data(idx, &channel, &data, &translate).await?;
                 }
             }
             None => {

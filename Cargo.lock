@@ -1635,6 +1635,7 @@ dependencies = [
  "futures-util",
  "go-parse-duration",
  "log",
+ "shlex",
  "tokio",
  "tracing-subscriber",
  "vergen-gitcl",
