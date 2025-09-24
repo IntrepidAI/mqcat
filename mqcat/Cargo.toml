@@ -8,14 +8,20 @@ default-run = "mqcat"
 
 [dependencies]
 # own crates
-mqcat-centrifuge = { path = "../mqcat-centrifuge" }
 mqcat-commons = { path = "../mqcat-commons" }
-mqcat-nats = { path = "../mqcat-nats" }
-mqcat-zenoh = { path = "../mqcat-zenoh" }
+mqcat-centrifuge = { path = "../mqcat-centrifuge", optional = true }
+mqcat-nats = { path = "../mqcat-nats", optional = true }
+mqcat-zenoh = { path = "../mqcat-zenoh", optional = true }
 
 # workspace dependencies
 clap = { workspace = true }
 tokio = { workspace = true }
+
+[features]
+default = []
+centrifuge = ["dep:mqcat-centrifuge"]
+nats = ["dep:mqcat-nats"]
+zenoh = ["dep:mqcat-zenoh"]
 
 [lints.clippy]
 len_zero = "allow"

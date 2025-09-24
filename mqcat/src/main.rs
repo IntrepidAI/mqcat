@@ -49,12 +49,16 @@ pub struct BaseArgs {
 #[derive(Parser, Debug)]
 #[command(subcommand_help_heading = "Transports", subcommand_value_name = "URL")]
 enum Transport {
-    #[command(about = "centrifuge (centrifugal.dev) client, json encoding\ndefault: cfj+ws://localhost:8000/connection/websocket\n")]
+    #[cfg(feature = "centrifuge")]
+    #[command(about = "centrifuge (centrifugal.dev) client, json encoding\ndefault: cfj+ws://localhost:8000/connection/websocket")]
     Cfj,
-    #[command(about = "centrifuge (centrifugal.dev) client, protobuf encoding\ndefault: cfp+ws://localhost:8000/connection/websocket?format=protobuf\n")]
+    #[cfg(feature = "centrifuge")]
+    #[command(about = "centrifuge (centrifugal.dev) client, protobuf encoding\ndefault: cfp+ws://localhost:8000/connection/websocket?format=protobuf")]
     Cfp,
-    #[command(about = "nats (nats.io) client\ndefault: nats://localhost:4222\n")]
+    #[cfg(feature = "nats")]
+    #[command(about = "nats (nats.io) client\ndefault: nats://localhost:4222")]
     Nats,
+    #[cfg(feature = "zenoh")]
     #[command(about = "zenoh (zenoh.io) client\ndefault: zenoh+tcp://localhost:7558")]
     Zenoh,
 }
@@ -104,22 +108,41 @@ async fn main() {
     args[transport_idx] = url;
 
     match &*transport {
+        #[cfg(feature = "centrifuge")]
         "cfj" => {
             mqcat_centrifuge::run(args.into_iter()).await;
         }
+        #[cfg(feature = "centrifuge")]
         "cfp" => {
             mqcat_centrifuge::run(args.into_iter()).await;
         }
+        #[cfg(feature = "nats")]
         "nats" => {
             mqcat_nats::run(args.into_iter()).await;
         }
+        #[cfg(feature = "zenoh")]
         "zenoh" => {
             mqcat_zenoh::run(args.into_iter()).await;
         }
         _ => {
+            #[allow(unused_mut)]
+            let mut transports: Vec<&str> = Vec::new();
+            #[cfg(feature = "centrifuge")]
+            transports.push("cfj");
+            #[cfg(feature = "centrifuge")]
+            transports.push("cfp");
+            #[cfg(feature = "nats")]
+            transports.push("nats");
+            #[cfg(feature = "zenoh")]
+            transports.push("zenoh");
+
             BaseArgs::command().error(
                 ErrorKind::InvalidValue,
-                format!("invalid transport: '{}', available transports are: 'cfj', 'cfp', 'nats', 'zenoh'", transport),
+                format!(
+                    "invalid transport: '{}', available transports are: {}",
+                    transport,
+                    transports.iter().map(|t| format!("'{}'", t)).collect::<Vec<String>>().join(", "),
+                ),
             ).exit();
         }
     }
