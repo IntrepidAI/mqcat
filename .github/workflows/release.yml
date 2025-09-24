@@ -110,9 +110,9 @@ jobs:
           - name: Pack releases
             run: |
                 export RELEASE_NAME=$(sed -e 's/^v//' <<< ${{ github.ref_name }})
-                test -d Linux && zip mqcat-${RELEASE_NAME}-x86_64-linux.zip Linux/mqcat || echo "Linux release not found"
-                test -d Windows && zip mqcat-${RELEASE_NAME}-x86_64-windows.zip Windows/mqcat.exe || echo "Windows release not found"
-                test -d macOS && zip mqcat-${RELEASE_NAME}-x86_64-macos.zip macOS/mqcat || echo "macOS release not found"
+                test -d Linux && pushd Linux && zip ../mqcat-${RELEASE_NAME}-x86_64-linux.zip mqcat && popd || echo "Linux release not found"
+                test -d Windows && pushd Windows && zip ../mqcat-${RELEASE_NAME}-x86_64-windows.zip mqcat.exe && popd || echo "Windows release not found"
+                test -d macOS && pushd macOS && zip ../mqcat-${RELEASE_NAME}-x86_64-macos.zip mqcat && popd || echo "macOS release not found"
 
           - name: Create release body
             run: |
