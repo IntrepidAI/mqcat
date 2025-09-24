@@ -125,16 +125,16 @@ async fn main() {
             mqcat_zenoh::run(args.into_iter()).await;
         }
         _ => {
-            #[allow(unused_mut)]
-            let mut transports: Vec<&str> = Vec::new();
-            #[cfg(feature = "centrifuge")]
-            transports.push("cfj");
-            #[cfg(feature = "centrifuge")]
-            transports.push("cfp");
-            #[cfg(feature = "nats")]
-            transports.push("nats");
-            #[cfg(feature = "zenoh")]
-            transports.push("zenoh");
+            let transports: Vec<&str> = vec![
+                #[cfg(feature = "centrifuge")]
+                "cfj",
+                #[cfg(feature = "centrifuge")]
+                "cfp",
+                #[cfg(feature = "nats")]
+                "nats",
+                #[cfg(feature = "zenoh")]
+                "zenoh",
+            ];
 
             BaseArgs::command().error(
                 ErrorKind::InvalidValue,
