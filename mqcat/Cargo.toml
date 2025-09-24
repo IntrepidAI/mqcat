@@ -1,26 +1,20 @@
 [package]
-name = "mqcat-nats"
+name = "mqcat"
 version = "0.1.0"
 license = "MIT"
 edition = "2024"
 rust-version = "1.85.0"
-
-[[bin]]
-name = "mqcat-nats"
-path = "src/main.rs"
+default-run = "mqcat"
 
 [dependencies]
+# own crates
+mqcat-centrifuge = { path = "../mqcat-centrifuge" }
 mqcat-commons = { path = "../mqcat-commons" }
-
-# external crates
-async-nats = "0.43.0"
+mqcat-nats = { path = "../mqcat-nats" }
+mqcat-zenoh = { path = "../mqcat-zenoh" }
 
 # workspace dependencies
-anyhow = { workspace = true }
-async-stream = { workspace = true }
 clap = { workspace = true }
-futures-util = { workspace = true }
-log = { workspace = true }
 tokio = { workspace = true }
 
 [lints.clippy]

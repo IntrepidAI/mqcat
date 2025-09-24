@@ -23,17 +23,22 @@ use crate::mqtrait::MessageQueue;
 pub struct BaseArgs/*<T: Args>*/ {
     // #[clap(flatten)]
     // pub args: T,
-    #[arg(global = true, short, long, help = "increase logging verbosity", action = clap::ArgAction::Count, conflicts_with = "quiet")]
+    #[arg(global = true, short, long, action = clap::ArgAction::Count, conflicts_with = "quiet")]
+    /// increase logging verbosity
     verbose: u8,
-    #[arg(global = true, short, long, help = "decrease logging verbosity", action = clap::ArgAction::Count, conflicts_with = "verbose")]
+    #[arg(global = true, short, long, action = clap::ArgAction::Count, conflicts_with = "verbose")]
+    /// decrease logging verbosity
     quiet: u8,
-    #[arg(global = true, short, long, help = "print this help message", action = clap::ArgAction::Help)]
+    #[arg(global = true, short, long, action = clap::ArgAction::Help)]
+    /// print this help message
     help: Option<bool>,
-    #[arg(short = 'V', long, help = "print version and build info")]
+    #[arg(global = true, short = 'V', long)]
+    /// print version and build info
     version: bool,
-    #[arg(help = "server address")]
+    /// server address
     url: String,
     #[command(subcommand)]
+    /// command (pub, sub, etc.)
     command: Option<Commands>,
 }
 
@@ -91,7 +96,10 @@ fn get_styles() -> Styles {
         .placeholder(AnsiColor::Green.on_default())
 }
 
-pub async fn init(run_app: impl AsyncFnOnce(BaseArgs) -> anyhow::Result<()>) {
+pub async fn init(
+    args: impl Iterator<Item = String>,
+    run_app: impl AsyncFnOnce(BaseArgs) -> anyhow::Result<()>,
+) {
     // set it up so:
     //  - ctrl-c stops polling current async task
     //  - double ctrl-c stops the process
@@ -126,7 +134,7 @@ pub async fn init(run_app: impl AsyncFnOnce(BaseArgs) -> anyhow::Result<()>) {
         abort_recv
     };
 
-    let args = BaseArgs::parse();
+    let args = BaseArgs::parse_from(args);
 
     // set verbosity level, default is info
     let filter_layer = filter::EnvFilter::builder()
@@ -215,11 +223,11 @@ async fn print_data(idx: u32, channel: &str, data: &[u8], translate: &Option<Str
     Ok(())
 }
 
-pub async fn run<Q: MessageQueue>() {
-    init(|args: BaseArgs| async move {
+pub async fn run<Q: MessageQueue>(args: impl Iterator<Item = String>) {
+    init(args, |args: BaseArgs| async move {
         match args.command {
             Some(Commands::Publish { channel, data, count, sleep }) => {
-                let mq = Q::connect(&args.url).await?;
+                let mq = Q::connect(if args.url.is_empty() { None } else { Some(&args.url) }).await?;
                 for n in 0..count {
                     if n > 0 {
                         tokio::time::sleep(sleep).await;
@@ -230,7 +238,7 @@ pub async fn run<Q: MessageQueue>() {
             }
             Some(Commands::Subscribe { channel, translate }) => {
                 let mut idx = 0;
-                let mq = Q::connect(&args.url).await?;
+                let mq = Q::connect(if args.url.is_empty() { None } else { Some(&args.url) }).await?;
                 let stream = mq.subscribe(&channel);
                 let mut stream = pin!(stream);
                 while let Some(msg) = stream.next().await {
@@ -240,7 +248,7 @@ pub async fn run<Q: MessageQueue>() {
                 }
             }
             Some(Commands::Request { channel, data, count, translate }) => {
-                let mq = Q::connect(&args.url).await?;
+                let mq = Q::connect(if args.url.is_empty() { None } else { Some(&args.url) }).await?;
                 let mut idx = 0;
                 for _ in 0..count {
                     log::info!("sending request to \"{}\"", channel);
