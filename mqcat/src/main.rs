@@ -120,11 +120,11 @@ async fn main() {
     match &*transport {
         #[cfg(feature = "centrifuge")]
         "cfj" => {
-            mqcat_centrifuge::run(args.into_iter()).await;
+            mqcat_centrifuge::run::<true>(args.into_iter()).await;
         }
         #[cfg(feature = "centrifuge")]
         "cfp" => {
-            mqcat_centrifuge::run(args.into_iter()).await;
+            mqcat_centrifuge::run::<false>(args.into_iter()).await;
         }
         #[cfg(feature = "nats")]
         "nats" => {

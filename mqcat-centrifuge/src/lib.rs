@@ -4,15 +4,21 @@ use mqcat_commons::mqtrait::MessageQueue;
 use tokio_centrifuge::client::Client;
 use tokio_centrifuge::config::Config;
 
-struct CentrifugeMQ {
+struct CentrifugeMQ<const JSON: bool> {
     client: Client,
 }
 
-impl MessageQueue for CentrifugeMQ {
+impl<const JSON: bool> MessageQueue for CentrifugeMQ<JSON> {
     async fn connect(addr: Option<&str>) -> anyhow::Result<Self> {
+        let (default_addr, config) = if JSON {
+            ("ws://localhost:8000/connection/websocket?format=json", Config::new().use_json())
+        } else {
+            ("ws://localhost:8000/connection/websocket?format=protobuf", Config::new().use_protobuf())
+        };
+
         let client = Client::new(
-            addr.unwrap_or("ws://localhost:8000/connection/websocket?format=protobuf"),
-            Config::new().use_json()
+            addr.unwrap_or(default_addr),
+            config.with_name(format!("mqcat {}", mqcat_commons::version::get_version()))
         );
 
         client.on_connecting(|e| {
@@ -90,6 +96,6 @@ impl MessageQueue for CentrifugeMQ {
     }
 }
 
-pub async fn run(args: impl Iterator<Item = String>) {
-    mqcat_commons::cli::run::<CentrifugeMQ>(args).await;
+pub async fn run<const JSON: bool>(args: impl Iterator<Item = String>) {
+    mqcat_commons::cli::run::<CentrifugeMQ<JSON>>(args).await;
 }
