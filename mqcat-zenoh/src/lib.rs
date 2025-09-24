@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use futures_util::Stream;
 use mqcat_commons::mqtrait::MessageQueue;
 use zenoh::Session;
@@ -32,8 +32,29 @@ impl MessageQueue for ZenohMQ {
     }
 
     async fn publish(&self, topic: &str, payload: &[u8]) -> anyhow::Result<()> {
-        self.client.put(topic.to_owned(), payload.to_vec()).await
+        let publisher = self.client.declare_publisher(topic.to_owned())
+            .await
+            .map_err(|err| anyhow!("declare failed: {}", err))?;
+
+        let matching_listener = publisher.matching_listener()
+            .await
+            .map_err(|err| anyhow!("matching listener failed: {}", err))?;
+
+        match tokio::time::timeout(Duration::from_secs(5), matching_listener.recv_async()).await {
+            Ok(Ok(result)) => {
+                log::debug!("matching listener status: {:?}", result.matching());
+            }
+            Ok(Err(err)) => {
+                bail!("recv failed: {}", err)
+            }
+            Err(_) => {
+                bail!("failed to find matching listeners")
+            }
+        }
+
+        publisher.put(payload.to_vec()).await
             .map_err(|err| anyhow!("failed to publish: {}", err))?;
+
         Ok(())
     }
 
