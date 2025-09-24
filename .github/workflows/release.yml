@@ -58,14 +58,14 @@ jobs:
             env:
                 RUSTFLAGS: "-C strip=symbols"
             run: |
-                cargo build --bin mqcat --target x86_64-unknown-linux-musl --release
+                cargo build --bin mqcat --target x86_64-unknown-linux-musl --release --features self-upgrade
 
           - name: Compile binary
             if: matrix.os != 'ubuntu-latest'
             env:
                 RUSTFLAGS: "-C strip=symbols"
             run: |
-                cargo build --bin mqcat --release
+                cargo build --bin mqcat --release --features self-upgrade
 
           - name: Copy binary (linux)
             if: matrix.os == 'ubuntu-latest'
