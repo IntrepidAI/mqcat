@@ -4,6 +4,9 @@ use clap::Parser;
 use clap::builder::Styles;
 use clap::builder::styling::AnsiColor;
 
+#[cfg(feature = "self-upgrade")]
+mod upgrade;
+
 #[derive(Parser, Debug)]
 #[command(bin_name = "mqcat")]
 #[command(disable_help_subcommand = true)]
@@ -18,6 +21,10 @@ pub struct HelpVersionOnly {
     #[arg(global = true, short = 'V', long)]
     /// print version and build info
     version: bool,
+    #[cfg(feature = "self-upgrade")]
+    #[arg(long)]
+    /// upgrade executable to the latest version
+    upgrade: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -25,9 +32,7 @@ pub struct HelpVersionOnly {
 #[command(disable_help_subcommand = true)]
 #[command(disable_help_flag = true)]
 #[command(disable_version_flag = true)]
-#[command(ignore_errors = true)]
 #[command(styles = get_styles())]
-#[command(after_help = "Run `mqcat zenoh --help` for further info.")]
 pub struct BaseArgs {
     #[arg(global = true, short, long, action = clap::ArgAction::Count, conflicts_with = "quiet")]
     /// increase logging verbosity
@@ -77,12 +82,17 @@ fn get_styles() -> Styles {
 async fn main() {
     let mut args = std::env::args().collect::<Vec<String>>();
 
-    if let Ok(args) = HelpVersionOnly::try_parse_from(args.iter()) {
-        if args.help {
+    if let Ok(basic_args) = HelpVersionOnly::try_parse_from(args.iter()) {
+        #[cfg(feature = "self-upgrade")]
+        if basic_args.upgrade {
+            upgrade::run_app(args).await;
+            return;
+        }
+        if basic_args.help {
             BaseArgs::command().print_help().unwrap();
             return;
         }
-        if args.version {
+        if basic_args.version {
             mqcat_commons::version::print_version();
             return;
         }

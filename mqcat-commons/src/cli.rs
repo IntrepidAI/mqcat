@@ -96,10 +96,7 @@ fn get_styles() -> Styles {
         .placeholder(AnsiColor::Green.on_default())
 }
 
-pub async fn init(
-    args: impl Iterator<Item = String>,
-    run_app: impl AsyncFnOnce(BaseArgs) -> anyhow::Result<()>,
-) {
+pub async fn ctrlc_trap(run_app: impl Future<Output = anyhow::Result<()>>) {
     // set it up so:
     //  - ctrl-c stops polling current async task
     //  - double ctrl-c stops the process
@@ -134,11 +131,22 @@ pub async fn init(
         abort_recv
     };
 
-    let args = BaseArgs::parse_from(args);
+    // run app, abort on ctrl-c
+    tokio::select! {
+        _ = abort_recv.recv() => {}
+        result = run_app => {
+            if let Err(e) = result {
+                log::error!("{}", e);
+                std::process::exit(1);
+            }
+        }
+    }
+}
 
+pub fn setup_logging(verbose: u8, quiet: u8) {
     // set verbosity level, default is info
     let filter_layer = filter::EnvFilter::builder()
-        .with_default_directive((match (args.verbose as i32).saturating_sub(args.quiet as i32) {
+        .with_default_directive((match (verbose as i32).saturating_sub(quiet as i32) {
             ..=-2 => filter::LevelFilter::ERROR,
             -1 => filter::LevelFilter::WARN,
             0 => filter::LevelFilter::INFO,
@@ -151,22 +159,21 @@ pub async fn init(
         .with(filter_layer)
         .with(tracing_subscriber::fmt::layer())
         .init();
+}
+
+pub async fn init(
+    args: impl Iterator<Item = String>,
+    run_app: impl AsyncFnOnce(BaseArgs) -> anyhow::Result<()>,
+) {
+    let args = BaseArgs::parse_from(args);
+    setup_logging(args.verbose, args.quiet);
 
     if args.version {
         crate::version::print_version();
         return;
     }
 
-    // run app, abort on ctrl-c
-    tokio::select! {
-        _ = abort_recv.recv() => {}
-        result = run_app(args) => {
-            if let Err(e) = result {
-                log::error!("{}", e);
-                std::process::exit(1);
-            }
-        }
-    }
+    ctrlc_trap(async move { run_app(args).await }).await;
 }
 
 async fn translate_data(data: &[u8], translate: &str) -> anyhow::Result<Vec<u8>> {

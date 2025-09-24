@@ -15,11 +15,19 @@ mqcat-nats = { path = "../mqcat-nats", optional = true }
 mqcat-zenoh = { path = "../mqcat-zenoh", optional = true }
 
 # workspace dependencies
+anyhow = { workspace = true }
 clap = { workspace = true }
+log = { workspace = true }
 tokio = { workspace = true }
 
+# deps for self-upgrade
+serde = { version = "1.0.226", features = ["derive"], optional = true }
+ureq = { version = "3.1.2", features = ["json"], optional = true }
+zip = { version = "5.1.1", optional = true }
+
 [features]
-default = ["centrifuge", "nats", "zenoh"]
+default = ["self-upgrade", "centrifuge", "nats", "zenoh"]
+self-upgrade = ["dep:serde", "dep:ureq", "dep:zip"]
 centrifuge = ["dep:mqcat-centrifuge"]
 nats = ["dep:mqcat-nats"]
 zenoh = ["dep:mqcat-zenoh"]
