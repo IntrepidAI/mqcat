@@ -59,7 +59,6 @@ jobs:
                 RUSTFLAGS: "-C strip=symbols"
             run: |
                 cargo build --bin mqcat --target x86_64-unknown-linux-musl --release
-                cp target/x86_64-unknown-linux-musl/release/mqcat ./
 
           - name: Compile binary
             if: matrix.os != 'ubuntu-latest'
@@ -67,13 +66,30 @@ jobs:
                 RUSTFLAGS: "-C strip=symbols"
             run: |
                 cargo build --bin mqcat --release
-                cp target/release/mqcat* ./
+
+          - name: Copy binary (linux)
+            if: matrix.os == 'ubuntu-latest'
+            run: |
+                mkdir release
+                cp target/x86_64-unknown-linux-musl/release/mqcat ./release/
+
+          - name: Copy binary (windows)
+            if: matrix.os == 'windows-latest'
+            run: |
+                mkdir release
+                cp target/release/mqcat.exe ./release/
+
+          - name: Copy binary (macos)
+            if: matrix.os == 'macos-latest'
+            run: |
+                mkdir release
+                cp target/release/mqcat ./release/
 
           - name: Upload artifact
             uses: actions/upload-artifact@v4
             with:
                 name: ${{ runner.os }}
-                path: mqcat*
+                path: release/*
                 retention-days: 1
 
     release:
@@ -87,17 +103,26 @@ jobs:
           - name: Download artifact
             uses: actions/download-artifact@v4
 
+          - name: Check artifact contents
+            run: |
+                ls -la */*
+
+          - name: Pack releases
+            run: |
+                export RELEASE_NAME=$(sed -e 's/^v//' <<< ${{ github.ref_name }})
+                test -d Linux && zip mqcat-${RELEASE_NAME}-x86_64-linux.zip Linux/mqcat || echo "Linux release not found"
+                test -d Windows && zip mqcat-${RELEASE_NAME}-x86_64-windows.zip Windows/mqcat.exe || echo "Windows release not found"
+                test -d macOS && zip mqcat-${RELEASE_NAME}-x86_64-macos.zip macOS/mqcat || echo "macOS release not found"
+
           - name: Create release body
             run: |
-                shasum Linux/* >> body.md
-                shasum Windows/* >> body.md
-                shasum macOS/* >> body.md
+                shasum *.zip >> body.md
 
           - name: Create Release
             uses: ncipollo/release-action@v1.14.0
             with:
                 allowUpdates: true
-                artifacts: "Linux/* Windows/* macOS/*"
+                artifacts: "*.zip"
                 artifactErrorsFailBuild: true
                 bodyFile: "body.md"
                 #draft: true

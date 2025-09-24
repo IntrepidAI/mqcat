@@ -18,7 +18,7 @@ clap = { workspace = true }
 tokio = { workspace = true }
 
 [features]
-default = []
+default = ["centrifuge", "nats", "zenoh"]
 centrifuge = ["dep:mqcat-centrifuge"]
 nats = ["dep:mqcat-nats"]
 zenoh = ["dep:mqcat-zenoh"]
