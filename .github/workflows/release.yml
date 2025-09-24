@@ -1,0 +1,103 @@
+name: Release
+
+on:
+    push:
+        tags:
+          - 'v*'
+
+env:
+    CARGO_TERM_COLOR: always
+    CARGO_INCREMENTAL: 0
+    CARGO_PROFILE_TEST_DEBUG: 0
+    CARGO_PROFILE_DEV_DEBUG: 0
+
+jobs:
+    build:
+        strategy:
+            matrix:
+                os: [windows-latest, ubuntu-latest, macos-latest]
+            fail-fast: true
+
+        timeout-minutes: 30
+        runs-on: ${{ matrix.os }}
+
+        steps:
+          - name: Checkout code
+            uses: actions/checkout@v4
+
+          - name: Install musl (linux)
+            if: matrix.os == 'ubuntu-latest'
+            uses: awalsh128/cache-apt-pkgs-action@latest
+            with:
+                packages: musl-tools
+
+          - name: Install Rust toolchain (linux)
+            if: matrix.os == 'ubuntu-latest'
+            #run: rustup target add x86_64-unknown-linux-musl
+            uses: dtolnay/rust-toolchain@stable
+            with:
+                targets: x86_64-unknown-linux-musl
+
+          - name: Install Rust toolchain
+            if: matrix.os != 'ubuntu-latest'
+            uses: dtolnay/rust-toolchain@stable
+
+          - name: Setup Rust cache
+            uses: actions/cache@v4
+            with:
+                path: |
+                    ~/.cargo/bin/
+                    ~/.cargo/registry/index/
+                    ~/.cargo/registry/cache/
+                    ~/.cargo/git/db/
+                    target/
+                key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.toml') }}
+
+          - name: Compile binary (linux)
+            if: matrix.os == 'ubuntu-latest'
+            env:
+                RUSTFLAGS: "-C strip=symbols"
+            run: |
+                cargo build --bin mqcat --target x86_64-unknown-linux-musl --release
+                cp target/x86_64-unknown-linux-musl/release/mqcat ./
+
+          - name: Compile binary
+            if: matrix.os != 'ubuntu-latest'
+            env:
+                RUSTFLAGS: "-C strip=symbols"
+            run: |
+                cargo build --bin mqcat --release
+                cp target/release/mqcat* ./
+
+          - name: Upload artifact
+            uses: actions/upload-artifact@v4
+            with:
+                name: ${{ runner.os }}
+                path: mqcat*
+                retention-days: 1
+
+    release:
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        needs: [build]
+        permissions:
+            contents: write
+
+        steps:
+          - name: Download artifact
+            uses: actions/download-artifact@v4
+
+          - name: Create release body
+            run: |
+                shasum Linux/* >> body.md
+                shasum Windows/* >> body.md
+                shasum macOS/* >> body.md
+
+          - name: Create Release
+            uses: ncipollo/release-action@v1.14.0
+            with:
+                allowUpdates: true
+                artifacts: "Linux/* Windows/* macOS/*"
+                artifactErrorsFailBuild: true
+                bodyFile: "body.md"
+                #draft: true
