@@ -10,7 +10,14 @@ I wanted to have the same experience as NATS CLI with other protocols/brokers, s
 
 ## Installation
 
-Download the binary from the [releases](https://github.com/IntrepidAI/mqcat/releases) page.
+Option 1 - download new binary:
+ - download the binary from the [releases](https://github.com/IntrepidAI/mqcat/releases) page
+
+Option 2 - update existing binary:
+ - run `mqcat --upgrade` to upgrade to the latest version
+
+Option 3 - compile from source code:
+ - run `cargo install mqcat` to install the latest version from source code (if you have Rust installed)
 
 ## Usage
 
