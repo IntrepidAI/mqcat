@@ -1,5 +1,6 @@
 [package]
 name = "mqcat"
+description = "CLI pub/sub client (supports zenoh/nats/mqtt/centrifuge)"
 version = "0.1.0"
 license = "MIT"
 edition = "2024"
