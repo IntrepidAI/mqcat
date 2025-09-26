@@ -86,7 +86,7 @@ fn parse_duration(s: &str) -> Result<Duration, String> {
     Ok(Duration::from_nanos(duration as u64))
 }
 
-fn get_styles() -> Styles {
+pub fn get_styles() -> Styles {
     // clap v3 styles, see
     // https://stackoverflow.com/questions/74068168/clap-rs-not-printing-colors-during-help
     Styles::styled()

@@ -1,11 +1,6 @@
 use clap::error::ErrorKind;
 use clap::CommandFactory;
 use clap::Parser;
-use clap::builder::Styles;
-use clap::builder::styling::AnsiColor;
-
-#[cfg(feature = "self-upgrade")]
-mod upgrade;
 
 #[derive(Parser, Debug)]
 #[command(bin_name = "mqcat")]
@@ -13,7 +8,7 @@ mod upgrade;
 #[command(disable_help_flag = true)]
 #[command(disable_version_flag = true)]
 #[command(ignore_errors = true)]
-#[command(styles = get_styles())]
+#[command(styles = mqcat::cli::get_styles())]
 pub struct HelpVersionOnly {
     #[arg(global = true, short, long)]
     /// print this help message
@@ -32,7 +27,7 @@ pub struct HelpVersionOnly {
 #[command(disable_help_subcommand = true)]
 #[command(disable_help_flag = true)]
 #[command(disable_version_flag = true)]
-#[command(styles = get_styles())]
+#[command(styles = mqcat::cli::get_styles())]
 pub struct BaseArgs {
     #[arg(global = true, short, long, action = clap::ArgAction::Count, conflicts_with = "quiet")]
     /// increase logging verbosity
@@ -68,16 +63,6 @@ enum Transport {
     Zenoh,
 }
 
-fn get_styles() -> Styles {
-    // clap v3 styles, see
-    // https://stackoverflow.com/questions/74068168/clap-rs-not-printing-colors-during-help
-    Styles::styled()
-        .header(AnsiColor::Yellow.on_default())
-        .usage(AnsiColor::Yellow.on_default())
-        .literal(AnsiColor::Green.on_default())
-        .placeholder(AnsiColor::Green.on_default())
-}
-
 #[tokio::main]
 async fn main() {
     let mut args = std::env::args().collect::<Vec<String>>();
@@ -85,7 +70,7 @@ async fn main() {
     if let Ok(basic_args) = HelpVersionOnly::try_parse_from(args.iter()) {
         #[cfg(feature = "self-upgrade")]
         if basic_args.upgrade {
-            upgrade::run_app(args).await;
+            mqcat::upgrade::run_app(args).await;
             return;
         }
         if basic_args.help {

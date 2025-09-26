@@ -9,8 +9,7 @@ use serde::Deserialize;
 #[command(disable_help_subcommand = true)]
 #[command(disable_help_flag = true)]
 #[command(disable_version_flag = true)]
-#[command(ignore_errors = true)]
-#[command(styles = crate::get_styles())]
+#[command(styles = crate::cli::get_styles())]
 #[command(override_usage = "mqcat [OPTIONS] --upgrade [VERSION]")]
 pub struct UpgradeArgs {
     #[arg(global = true, short, long, action = clap::ArgAction::Count, conflicts_with = "quiet")]
@@ -40,8 +39,8 @@ pub struct UpgradeArgs {
 
 pub async fn run_app(args: Vec<String>) {
     let args = UpgradeArgs::parse_from(args);
-    mqcat_commons::cli::setup_logging(args.verbose, args.quiet);
-    mqcat_commons::cli::ctrlc_trap(async move {
+    crate::cli::setup_logging(args.verbose, args.quiet);
+    crate::cli::ctrlc_trap(async move {
         upgrade(args.version, args.force, args.dry_run, args.arch).await
     }).await;
 }
@@ -53,7 +52,7 @@ fn check_valid_chars(s: &str) -> bool {
 
 pub async fn upgrade(version: Option<String>, force: bool, dry_run: bool, arch: Option<String>) -> anyhow::Result<()> {
     let version = version.unwrap_or_else(|| "latest".to_owned());
-    let arch = arch.unwrap_or_else(|| mqcat_commons::version::get_target_triple(false));
+    let arch = arch.unwrap_or_else(|| crate::version::get_target_triple(false));
 
     if !check_valid_chars(&version) {
         bail!("invalid version: {}", version);
@@ -85,15 +84,15 @@ pub async fn upgrade(version: Option<String>, force: bool, dry_run: bool, arch: 
         .body_mut()
         .read_json::<GithubRelease>()?;
 
-    if manifest_response.tag_name == mqcat_commons::version::get_version() && !force {
+    if manifest_response.tag_name == crate::version::get_version() && !force {
         log::info!("already up to date");
         return Ok(());
     }
 
     let updated_date = manifest_response.updated_at.split('T').next().unwrap_or_default();
-    if updated_date < mqcat_commons::version::get_build_date() && !force {
+    if updated_date < crate::version::get_build_date() && !force {
         log::warn!("your build is newer than the latest release");
-        log::warn!("current build date: {}", mqcat_commons::version::get_build_date());
+        log::warn!("current build date: {}", crate::version::get_build_date());
         log::warn!("release build date: {}", updated_date);
         log::warn!("use --force if you want to downgrade");
         return Ok(());
