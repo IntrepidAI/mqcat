@@ -1,8 +1,9 @@
 use anyhow::anyhow;
 use futures_util::Stream;
-use mqcat_commons::mqtrait::MessageQueue;
 use tokio_centrifuge::client::Client;
 use tokio_centrifuge::config::Config;
+
+use crate::mqtrait::MessageQueue;
 
 struct CentrifugeMQ<const JSON: bool> {
     client: Client,
@@ -18,7 +19,7 @@ impl<const JSON: bool> MessageQueue for CentrifugeMQ<JSON> {
 
         let client = Client::new(
             addr.unwrap_or(default_addr),
-            config.with_name(format!("mqcat {}", mqcat_commons::version::get_version()))
+            config.with_name(format!("mqcat {}", crate::version::get_version()))
         );
 
         client.on_connecting(|e| {
@@ -97,5 +98,5 @@ impl<const JSON: bool> MessageQueue for CentrifugeMQ<JSON> {
 }
 
 pub async fn run<const JSON: bool>(args: impl Iterator<Item = String>) {
-    mqcat_commons::cli::run::<CentrifugeMQ<JSON>>(args).await;
+    crate::cli::run::<CentrifugeMQ<JSON>>(args).await;
 }

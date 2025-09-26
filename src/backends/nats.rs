@@ -1,7 +1,8 @@
 use anyhow::{anyhow, bail};
 use async_nats::Client;
 use futures_util::{Stream, StreamExt};
-use mqcat_commons::mqtrait::MessageQueue;
+
+use crate::mqtrait::MessageQueue;
 
 struct NatsMQ {
     client: Client,
@@ -45,5 +46,5 @@ impl MessageQueue for NatsMQ {
 }
 
 pub async fn run(args: impl Iterator<Item = String>) {
-    mqcat_commons::cli::run::<NatsMQ>(args).await;
+    crate::cli::run::<NatsMQ>(args).await;
 }

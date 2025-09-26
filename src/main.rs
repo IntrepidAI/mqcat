@@ -54,16 +54,16 @@ pub struct BaseArgs {
 #[derive(Parser, Debug)]
 #[command(subcommand_help_heading = "Transports", subcommand_value_name = "URL")]
 enum Transport {
-    #[cfg(feature = "centrifuge")]
+    #[cfg(feature = "backend-centrifuge")]
     #[command(about = "centrifuge (centrifugal.dev) client, json encoding\ndefault: cfj+ws://localhost:8000/connection/websocket")]
     Cfj,
-    #[cfg(feature = "centrifuge")]
+    #[cfg(feature = "backend-centrifuge")]
     #[command(about = "centrifuge (centrifugal.dev) client, protobuf encoding\ndefault: cfp+ws://localhost:8000/connection/websocket?format=protobuf")]
     Cfp,
-    #[cfg(feature = "nats")]
+    #[cfg(feature = "backend-nats")]
     #[command(about = "nats (nats.io) client\ndefault: nats://localhost:4222")]
     Nats,
-    #[cfg(feature = "zenoh")]
+    #[cfg(feature = "backend-zenoh")]
     #[command(about = "zenoh (zenoh.io) client\ndefault: zenoh+tcp://localhost:7558")]
     Zenoh,
 }
@@ -93,7 +93,7 @@ async fn main() {
             return;
         }
         if basic_args.version {
-            mqcat_commons::version::print_version();
+            mqcat::version::print_version();
             return;
         }
     }
@@ -112,37 +112,37 @@ async fn main() {
     };
 
     let url = args.get(transport_idx).unwrap();
-    let (transport, url) = mqcat_commons::url_transport::parse(url);
+    let (transport, url) = mqcat::url_transport::parse(url);
     let transport = transport.to_owned();
     let url = url.to_owned();
     args[transport_idx] = url;
 
     match &*transport {
-        #[cfg(feature = "centrifuge")]
+        #[cfg(feature = "backend-centrifuge")]
         "cfj" => {
-            mqcat_centrifuge::run::<true>(args.into_iter()).await;
+            mqcat::backends::centrifuge::run::<true>(args.into_iter()).await;
         }
-        #[cfg(feature = "centrifuge")]
+        #[cfg(feature = "backend-centrifuge")]
         "cfp" => {
-            mqcat_centrifuge::run::<false>(args.into_iter()).await;
+            mqcat::backends::centrifuge::run::<false>(args.into_iter()).await;
         }
-        #[cfg(feature = "nats")]
+        #[cfg(feature = "backend-nats")]
         "nats" => {
-            mqcat_nats::run(args.into_iter()).await;
+            mqcat::backends::nats::run(args.into_iter()).await;
         }
-        #[cfg(feature = "zenoh")]
+        #[cfg(feature = "backend-zenoh")]
         "zenoh" => {
-            mqcat_zenoh::run(args.into_iter()).await;
+            mqcat::backends::zenoh::run(args.into_iter()).await;
         }
         _ => {
             let transports: Vec<&str> = vec![
-                #[cfg(feature = "centrifuge")]
+                #[cfg(feature = "backend-centrifuge")]
                 "cfj",
-                #[cfg(feature = "centrifuge")]
+                #[cfg(feature = "backend-centrifuge")]
                 "cfp",
-                #[cfg(feature = "nats")]
+                #[cfg(feature = "backend-nats")]
                 "nats",
-                #[cfg(feature = "zenoh")]
+                #[cfg(feature = "backend-zenoh")]
                 "zenoh",
             ];
 

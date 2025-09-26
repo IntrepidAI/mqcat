@@ -2,9 +2,10 @@ use std::time::Duration;
 
 use anyhow::{anyhow, bail};
 use futures_util::Stream;
-use mqcat_commons::mqtrait::MessageQueue;
 use zenoh::Session;
 use zenoh::query::QueryTarget;
+
+use crate::mqtrait::MessageQueue;
 
 struct ZenohMQ {
     client: Session,
@@ -87,5 +88,5 @@ impl MessageQueue for ZenohMQ {
 }
 
 pub async fn run(args: impl Iterator<Item = String>) {
-    mqcat_commons::cli::run::<ZenohMQ>(args).await;
+    crate::cli::run::<ZenohMQ>(args).await;
 }
