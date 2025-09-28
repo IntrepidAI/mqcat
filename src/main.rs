@@ -17,7 +17,7 @@ pub struct HelpVersionOnly {
     /// print version and build info
     version: bool,
     #[cfg(feature = "self-upgrade")]
-    #[arg(long)]
+    #[arg(short = 'U', long)]
     /// upgrade executable to the latest version
     upgrade: bool,
 }

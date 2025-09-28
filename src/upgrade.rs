@@ -21,7 +21,7 @@ pub struct UpgradeArgs {
     #[arg(global = true, short, long, action = clap::ArgAction::Help)]
     /// print this help message
     help: Option<bool>,
-    #[arg(long, hide = true)]
+    #[arg(short = 'U', long, hide = true)]
     /// upgrade executable to the latest version
     upgrade: bool,
     /// upgrade to a specific version (v0.0.0) or release channel (stable, dev)
