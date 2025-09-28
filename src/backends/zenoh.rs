@@ -1,11 +1,13 @@
+use std::str::FromStr;
 use std::time::Duration;
 
 use anyhow::{anyhow, bail};
 use futures_util::Stream;
+use zenoh::bytes::Encoding;
 use zenoh::Session;
 use zenoh::query::QueryTarget;
 
-use crate::mqtrait::MessageQueue;
+use crate::mqtrait::{Frame, MessageQueue};
 
 struct ZenohMQ {
     client: Session,
@@ -32,8 +34,18 @@ impl MessageQueue for ZenohMQ {
         Ok(Self { client: zenoh })
     }
 
-    async fn publish(&self, topic: &str, payload: &[u8]) -> anyhow::Result<()> {
+    async fn publish(&self, topic: &str, headers: &[(String, String)], payload: &[u8]) -> anyhow::Result<()> {
+        let mut encoding = Encoding::default();
+        for (key, value) in headers {
+            if key.eq_ignore_ascii_case("content-type") {
+                encoding = Encoding::from_str(value)?;
+            } else {
+                log::warn!("unknown header: {}, zenoh only supports Content-Type", key);
+            }
+        }
+
         let publisher = self.client.declare_publisher(topic.to_owned())
+            .encoding(encoding)
             .await
             .map_err(|err| anyhow!("declare failed: {}", err))?;
 
@@ -59,7 +71,7 @@ impl MessageQueue for ZenohMQ {
         Ok(())
     }
 
-    fn subscribe(&self, topic: &str) -> impl Stream<Item = anyhow::Result<(String, Vec<u8>)>> {
+    fn subscribe(&self, topic: &str) -> impl Stream<Item = anyhow::Result<Frame>> {
         let subscriber = self.client.declare_subscriber(topic.to_owned());
 
         async_stream::try_stream! {
@@ -68,7 +80,15 @@ impl MessageQueue for ZenohMQ {
             loop {
                 let sample = subscriber.recv_async().await
                     .map_err(|err| anyhow!("recv failed: {}", err))?;
-                yield (sample.key_expr().to_string(), sample.payload().to_bytes().to_vec());
+                let mut frame = Frame {
+                    topic: sample.key_expr().to_string(),
+                    headers: Default::default(),
+                    payload: sample.payload().to_bytes().to_vec(),
+                };
+                if sample.encoding() != &Encoding::default() {
+                    frame.headers.insert("Content-Type".to_string(), vec![sample.encoding().to_string()]);
+                }
+                yield frame;
             }
         }
     }

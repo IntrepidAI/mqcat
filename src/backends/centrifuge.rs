@@ -3,7 +3,7 @@ use futures_util::Stream;
 use tokio_centrifuge::client::Client;
 use tokio_centrifuge::config::Config;
 
-use crate::mqtrait::MessageQueue;
+use crate::mqtrait::{Frame, MessageQueue};
 
 struct CentrifugeMQ<const JSON: bool> {
     client: Client,
@@ -40,13 +40,16 @@ impl<const JSON: bool> MessageQueue for CentrifugeMQ<JSON> {
         Ok(Self { client })
     }
 
-    async fn publish(&self, topic: &str, payload: &[u8]) -> anyhow::Result<()> {
+    async fn publish(&self, topic: &str, headers: &[(String, String)], payload: &[u8]) -> anyhow::Result<()> {
+        if headers.len() > 0 {
+            log::warn!("setting headers is not supported by centrifuge");
+        }
         self.client.publish(topic, payload.to_vec()).await
             .map_err(|err| anyhow!("failed to publish: {}", err))?;
         Ok(())
     }
 
-    fn subscribe(&self, topic: &str) -> impl Stream<Item = anyhow::Result<(String, Vec<u8>)>> {
+    fn subscribe(&self, topic: &str) -> impl Stream<Item = anyhow::Result<Frame>> {
         let sub = self.client.new_subscription(topic);
         let (recv_tx, mut recv_rx) = tokio::sync::mpsc::channel(64);
         let (unsub_tx, mut unsub_rx) = tokio::sync::mpsc::channel(1);
@@ -63,7 +66,12 @@ impl<const JSON: bool> MessageQueue for CentrifugeMQ<JSON> {
             log::debug!("subscribing to {} (code={}, reason={})", e.channel, e.code, e.reason);
         });
         sub.on_publication(move |data| {
-            if let Err(err) = recv_tx.try_send((data.channel, data.data)) {
+            let frame = Frame {
+                topic: data.channel,
+                headers: data.tags.into_iter().map(|(k, v)| (k, vec![v])).collect(),
+                payload: data.data,
+            };
+            if let Err(err) = recv_tx.try_send(frame) {
                 let _ = unsub_tx.try_send((0, format!("{}", err)));
             }
         });
@@ -73,11 +81,11 @@ impl<const JSON: bool> MessageQueue for CentrifugeMQ<JSON> {
         async_stream::try_stream! {
             loop {
                 tokio::select! {
-                    Some((mut channel, data)) = recv_rx.recv() => {
-                        if channel.is_empty() {
-                            channel = topic.to_owned();
+                    Some(mut frame) = recv_rx.recv() => {
+                        if frame.topic.is_empty() {
+                            frame.topic = topic.to_owned();
                         }
-                        yield (channel, data);
+                        yield frame;
                     }
                     Some((code, reason)) = unsub_rx.recv() => {
                         break Err(anyhow!("subscription failed: {} {}", code, reason));

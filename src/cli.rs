@@ -50,6 +50,8 @@ enum Commands {
         channel: String,
         #[arg(help = "data to publish")]
         data: String,
+        #[arg(short = 'H', long, help = "add header to the message", value_parser = parse_header)]
+        header: Vec<(String, String)>,
         #[arg(long, help = "publish multiple messages", default_value = "1")]
         count: u32,
         #[arg(long, help = "sleep between messages", default_value = "0", value_parser = parse_duration)]
@@ -75,6 +77,14 @@ enum Commands {
         #[arg(long, help = "decode the message by passing it through a given command")]
         translate: Option<String>,
     },
+}
+
+fn parse_header(s: &str) -> Result<(String, String), String> {
+    let parts = s.splitn(2, ':').collect::<Vec<&str>>();
+    if parts.len() != 2 {
+        return Err("header must be in the format of \"key: value\"".to_string());
+    }
+    Ok((parts[0].trim().to_string(), parts[1].trim().to_string()))
 }
 
 fn parse_duration(s: &str) -> Result<Duration, String> {
@@ -208,10 +218,19 @@ async fn translate_data(data: &[u8], translate: &str) -> anyhow::Result<Vec<u8>>
     Ok(result.stdout)
 }
 
-async fn print_data(idx: u32, channel: &str, data: &[u8], translate: &Option<String>) -> anyhow::Result<()> {
+async fn print_data(idx: u32, channel: &str, headers: &std::collections::BTreeMap<String, Vec<String>>, data: &[u8], translate: &Option<String>) -> anyhow::Result<()> {
     std::io::stdout().write_all(
         format!("[#{idx}] Received on \"{}\" ({} bytes)\n", channel, data.len()).as_bytes()
     )?;
+
+    if !headers.is_empty() {
+        for (key, values) in headers {
+            for value in values {
+                std::io::stdout().write_all(format!("{}: {}\n", key, value).as_bytes())?;
+            }
+        }
+        std::io::stdout().write_all(b"\n")?;
+    }
 
     let mut data = Cow::Borrowed(data);
     if let Some(translate) = translate {
@@ -233,13 +252,13 @@ async fn print_data(idx: u32, channel: &str, data: &[u8], translate: &Option<Str
 pub async fn run<Q: MessageQueue>(args: impl Iterator<Item = String>) {
     init(args, |args: BaseArgs| async move {
         match args.command {
-            Some(Commands::Publish { channel, data, count, sleep }) => {
+            Some(Commands::Publish { channel, data, header, count, sleep }) => {
                 let mq = Q::connect(if args.url.is_empty() { None } else { Some(&args.url) }).await?;
                 for n in 0..count {
                     if n > 0 {
                         tokio::time::sleep(sleep).await;
                     }
-                    mq.publish(&channel, data.as_bytes()).await?;
+                    mq.publish(&channel, &header, data.as_bytes()).await?;
                     log::info!("published {} bytes to \"{}\"", data.len(), channel);
                 }
             }
@@ -249,9 +268,9 @@ pub async fn run<Q: MessageQueue>(args: impl Iterator<Item = String>) {
                 let stream = mq.subscribe(&channel);
                 let mut stream = pin!(stream);
                 while let Some(msg) = stream.next().await {
-                    let (channel, data) = msg?;
+                    let frame = msg?;
                     idx += 1;
-                    print_data(idx, &channel, &data, &translate).await?;
+                    print_data(idx, &frame.topic, &frame.headers, &frame.payload, &translate).await?;
                 }
             }
             Some(Commands::Request { channel, data, count, translate }) => {
@@ -263,7 +282,7 @@ pub async fn run<Q: MessageQueue>(args: impl Iterator<Item = String>) {
                     let data = mq.request(&channel, data.as_bytes()).await?;
                     log::info!("received with rtt {:?}", time.elapsed());
                     idx += 1;
-                    print_data(idx, &channel, &data, &translate).await?;
+                    print_data(idx, &channel, &Default::default(), &data, &translate).await?;
                 }
             }
             None => {
