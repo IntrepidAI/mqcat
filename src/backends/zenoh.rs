@@ -93,17 +93,34 @@ impl MessageQueue for ZenohMQ {
         }
     }
 
-    async fn request(&self, topic: &str, payload: &[u8]) -> anyhow::Result<Vec<u8>> {
+    async fn request(&self, topic: &str, headers: &[(String, String)], payload: &[u8]) -> anyhow::Result<Frame> {
+        let mut encoding = Encoding::default();
+        for (key, value) in headers {
+            if key.eq_ignore_ascii_case("content-type") {
+                encoding = Encoding::from_str(value)?;
+            } else {
+                log::warn!("unknown header: {}, zenoh only supports Content-Type", key);
+            }
+        }
+
         let querier = self.client.declare_querier(topic.to_owned())
             .target(QueryTarget::BestMatching)
             .await
             .map_err(|err| anyhow!("declare failed: {}", err))?;
-        let replies = querier.get().payload(payload.to_vec()).await
+        let replies = querier.get().payload(payload.to_vec()).encoding(encoding).await
             .map_err(|err| anyhow!("query failed: {}", err))?;
         let reply = replies.recv_async().await
             .map_err(|err| anyhow!("recv failed: {}", err))?;
         let result = reply.result().map_err(|err| anyhow!("result failed: {}", err))?;
-        Ok(result.payload().to_bytes().to_vec())
+        let mut frame = Frame {
+            topic: result.key_expr().to_string(),
+            headers: Default::default(),
+            payload: result.payload().to_bytes().to_vec(),
+        };
+        if result.encoding() != &Encoding::default() {
+            frame.headers.insert("Content-Type".to_string(), vec![result.encoding().to_string()]);
+        }
+        Ok(frame)
     }
 }
 

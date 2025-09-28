@@ -49,13 +49,27 @@ impl MessageQueue for NatsMQ {
         }
     }
 
-    async fn request(&self, topic: &str, payload: &[u8]) -> anyhow::Result<Vec<u8>> {
+    async fn request(&self, topic: &str, headers: &[(String, String)], payload: &[u8]) -> anyhow::Result<Frame> {
         if topic.is_empty() {
             bail!("subject is empty");
         }
-        let res = self.client.request(topic.to_owned(), payload.to_vec().into()).await
+        let mut headermap = HeaderMap::new();
+        for (key, value) in headers {
+            headermap.insert(&**key, &**value);
+        }
+        let res = self.client.request_with_headers(topic.to_owned(), headermap, payload.to_vec().into()).await
             .map_err(|err| anyhow!("failed to request: {}", err))?;
-        Ok(res.payload.into())
+        let mut frame = Frame {
+            topic: topic.to_owned(),
+            headers: Default::default(),
+            payload: res.payload.into(),
+        };
+        if let Some(headers) = res.headers {
+            for (key, values) in headers.iter() {
+                frame.headers.insert(key.to_string(), values.iter().map(|v| v.to_string()).collect());
+            }
+        }
+        Ok(frame)
     }
 }
 

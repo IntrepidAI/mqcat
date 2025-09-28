@@ -13,6 +13,7 @@ use tokio::sync::mpsc::error::TrySendError;
 use tracing_subscriber::filter;
 use tracing_subscriber::prelude::*;
 
+use crate::mqtrait::Frame;
 use crate::mqtrait::MessageQueue;
 
 #[derive(Parser, Debug)]
@@ -72,6 +73,8 @@ enum Commands {
         channel: String,
         #[arg(help = "request data")]
         data: String,
+        #[arg(short = 'H', long, help = "add header to the message", value_parser = parse_header)]
+        header: Vec<(String, String)>,
         #[arg(long, help = "publish multiple messages", default_value = "1")]
         count: u32,
         #[arg(long, help = "decode the message by passing it through a given command")]
@@ -218,13 +221,13 @@ async fn translate_data(data: &[u8], translate: &str) -> anyhow::Result<Vec<u8>>
     Ok(result.stdout)
 }
 
-async fn print_data(idx: u32, channel: &str, headers: &std::collections::BTreeMap<String, Vec<String>>, data: &[u8], translate: &Option<String>) -> anyhow::Result<()> {
+async fn print_data(idx: u32, frame: &Frame, translate: &Option<String>) -> anyhow::Result<()> {
     std::io::stdout().write_all(
-        format!("[#{idx}] Received on \"{}\" ({} bytes)\n", channel, data.len()).as_bytes()
+        format!("[#{idx}] Received on \"{}\" ({} bytes)\n", frame.topic, frame.payload.len()).as_bytes()
     )?;
 
-    if !headers.is_empty() {
-        for (key, values) in headers {
+    if !frame.headers.is_empty() {
+        for (key, values) in frame.headers.iter() {
             for value in values {
                 std::io::stdout().write_all(format!("{}: {}\n", key, value).as_bytes())?;
             }
@@ -232,7 +235,7 @@ async fn print_data(idx: u32, channel: &str, headers: &std::collections::BTreeMa
         std::io::stdout().write_all(b"\n")?;
     }
 
-    let mut data = Cow::Borrowed(data);
+    let mut data = Cow::Borrowed(&frame.payload);
     if let Some(translate) = translate {
         data = Cow::Owned(translate_data(&data, translate).await?);
     }
@@ -270,19 +273,19 @@ pub async fn run<Q: MessageQueue>(args: impl Iterator<Item = String>) {
                 while let Some(msg) = stream.next().await {
                     let frame = msg?;
                     idx += 1;
-                    print_data(idx, &frame.topic, &frame.headers, &frame.payload, &translate).await?;
+                    print_data(idx, &frame, &translate).await?;
                 }
             }
-            Some(Commands::Request { channel, data, count, translate }) => {
+            Some(Commands::Request { channel, data, header, count, translate }) => {
                 let mq = Q::connect(if args.url.is_empty() { None } else { Some(&args.url) }).await?;
                 let mut idx = 0;
                 for _ in 0..count {
                     log::info!("sending request to \"{}\"", channel);
                     let time = std::time::Instant::now();
-                    let data = mq.request(&channel, data.as_bytes()).await?;
+                    let frame = mq.request(&channel, &header, data.as_bytes()).await?;
                     log::info!("received with rtt {:?}", time.elapsed());
                     idx += 1;
-                    print_data(idx, &channel, &Default::default(), &data, &translate).await?;
+                    print_data(idx, &frame, &translate).await?;
                 }
             }
             None => {

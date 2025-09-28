@@ -98,10 +98,17 @@ impl<const JSON: bool> MessageQueue for CentrifugeMQ<JSON> {
         }
     }
 
-    async fn request(&self, topic: &str, payload: &[u8]) -> anyhow::Result<Vec<u8>> {
+    async fn request(&self, topic: &str, headers: &[(String, String)], payload: &[u8]) -> anyhow::Result<Frame> {
+        if headers.len() > 0 {
+            log::warn!("setting headers is not supported by centrifuge");
+        }
         let res = self.client.rpc(topic, payload.to_vec()).await
             .map_err(|err| anyhow!("failed to execute rpc: {}", err))?;
-        Ok(res)
+        Ok(Frame {
+            topic: topic.to_owned(),
+            headers: Default::default(),
+            payload: res,
+        })
     }
 }
 
