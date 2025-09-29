@@ -1,9 +1,11 @@
+use std::time::Duration;
+
 use anyhow::anyhow;
 use futures_util::Stream;
 use tokio_centrifuge::client::Client;
 use tokio_centrifuge::config::Config;
 
-use crate::mqtrait::{Frame, MessageQueue};
+use crate::{mqtrait::{Frame, MessageQueue}, utils::format_table};
 
 struct CentrifugeMQ<const JSON: bool> {
     client: Client,
@@ -38,6 +40,22 @@ impl<const JSON: bool> MessageQueue for CentrifugeMQ<JSON> {
         client.connect().await.map_err(|_| anyhow::Error::msg("failed to connect"))?;
 
         Ok(Self { client })
+    }
+
+    async fn info(&self) -> anyhow::Result<String> {
+        let mut info = vec![];
+        let server_info = self.client.server_info();
+        info.push(("Client ID", server_info.client_id.to_string()));
+
+        info.push(("Server Version", server_info.server_version));
+        info.push(("Ping Interval", format!("{:?}", Duration::from_secs(server_info.server_ping as u64))));
+        info.push(("Pong Required", server_info.send_pong.to_string()));
+        info.push(("Token Expires", server_info.token_expires.to_string()));
+        if server_info.token_expires {
+            info.push(("Token TTL", format!("{:?}", Duration::from_secs(server_info.token_ttl as u64))));
+        }
+
+        Ok(format_table(&info))
     }
 
     async fn publish(&self, topic: &str, headers: &[(String, String)], payload: &[u8]) -> anyhow::Result<()> {

@@ -45,6 +45,9 @@ pub struct BaseArgs/*<T: Args>*/ {
 
 #[derive(Parser, Debug)]
 enum Commands {
+    #[command(about = "show server info")]
+    Info,
+
     #[command(about = "publish a message to a channel", alias = "pub")]
     Publish {
         #[arg(help = "channel name")]
@@ -255,6 +258,12 @@ async fn print_data(idx: u32, frame: &Frame, translate: &Option<String>) -> anyh
 pub async fn run<Q: MessageQueue>(args: impl Iterator<Item = String>) {
     init(args, |args: BaseArgs| async move {
         match args.command {
+            Some(Commands::Info) => {
+                let mq = Q::connect(if args.url.is_empty() { None } else { Some(&args.url) }).await?;
+                let info = mq.info().await?;
+                std::io::stdout().write_all(info.as_bytes())?;
+                std::io::stdout().flush()?;
+            }
             Some(Commands::Publish { channel, data, header, count, sleep }) => {
                 let mq = Q::connect(if args.url.is_empty() { None } else { Some(&args.url) }).await?;
                 for n in 0..count {

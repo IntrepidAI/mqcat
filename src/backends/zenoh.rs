@@ -3,14 +3,16 @@ use std::time::Duration;
 
 use anyhow::{anyhow, bail};
 use futures_util::Stream;
-use zenoh::bytes::Encoding;
 use zenoh::Session;
+use zenoh::bytes::Encoding;
 use zenoh::query::QueryTarget;
 
 use crate::mqtrait::{Frame, MessageQueue};
+use crate::utils::format_table;
 
 struct ZenohMQ {
     client: Session,
+    // config: Config,
 }
 
 impl Drop for ZenohMQ {
@@ -32,6 +34,20 @@ impl MessageQueue for ZenohMQ {
             .map_err(|e| anyhow::anyhow!(e))?;
 
         Ok(Self { client: zenoh })
+    }
+
+    async fn info(&self) -> anyhow::Result<String> {
+        let mut info = vec![];
+        let session_info = self.client.info();
+        info.push(("Client ID", session_info.zid().await.to_string()));
+        for router in session_info.routers_zid().await {
+            info.push(("Connected Router ID", router.to_string()));
+        }
+        for peer in session_info.peers_zid().await {
+            info.push(("Connected Peer ID", peer.to_string()));
+        }
+
+        Ok(format_table(&info))
     }
 
     async fn publish(&self, topic: &str, headers: &[(String, String)], payload: &[u8]) -> anyhow::Result<()> {

@@ -2,7 +2,7 @@ use anyhow::{anyhow, bail};
 use async_nats::{Client, HeaderMap};
 use futures_util::{Stream, StreamExt};
 
-use crate::mqtrait::{Frame, MessageQueue};
+use crate::{mqtrait::{Frame, MessageQueue}, utils::format_table};
 
 struct NatsMQ {
     client: Client,
@@ -12,6 +12,29 @@ impl MessageQueue for NatsMQ {
     async fn connect(addr: Option<&str>) -> anyhow::Result<Self> {
         let client = async_nats::connect(addr.unwrap_or("nats://localhost:4222")).await?;
         Ok(Self { client })
+    }
+
+    async fn info(&self) -> anyhow::Result<String> {
+        let mut info = vec![];
+        let server_info = self.client.server_info();
+        info.push(("Client ID", server_info.client_id.to_string()));
+        info.push(("Client IP", server_info.client_ip));
+        // info.push(("", String::new()));
+
+        let has_name = server_info.server_name != server_info.server_id;
+        info.push(("Server ID", server_info.server_id));
+        if has_name {
+            info.push(("Server Name", server_info.server_name));
+        }
+
+        info.push(("Server Address", format!("{}:{}", server_info.host, server_info.port)));
+        info.push(("Server Version", format!("{} ({})", server_info.version, server_info.go)));
+
+        info.push(("Headers Supported", server_info.headers.to_string()));
+        info.push(("Maximum Payload", server_info.max_payload.to_string()));
+        info.push(("Timeout", if let Some(timeout) = self.client.timeout() { format!("{:?}", timeout) } else { "None".to_string() }));
+
+        Ok(format_table(&info))
     }
 
     async fn publish(&self, topic: &str, headers: &[(String, String)], payload: &[u8]) -> anyhow::Result<()> {
