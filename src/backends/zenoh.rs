@@ -11,6 +11,7 @@ use crate::mqtrait::{Frame, MessageQueue};
 use crate::utils::format_table;
 
 struct ZenohMQ {
+    url: Option<String>,
     client: Session,
     // config: Config,
 }
@@ -24,7 +25,9 @@ impl Drop for ZenohMQ {
 impl MessageQueue for ZenohMQ {
     async fn connect(addr: Option<&str>) -> anyhow::Result<Self> {
         let mut config = zenoh::Config::default();
+        let mut url = None;
         if let Some(addr) = addr {
+            url = Some(addr.to_owned());
             config
                 .insert_json5("connect/endpoints", &serde_json::json!([addr]).to_string())
                 .unwrap();
@@ -33,11 +36,15 @@ impl MessageQueue for ZenohMQ {
         let zenoh = zenoh::open(config).await
             .map_err(|e| anyhow::anyhow!(e))?;
 
-        Ok(Self { client: zenoh })
+        Ok(Self { url, client: zenoh })
     }
 
     async fn info(&self) -> anyhow::Result<String> {
         let mut info = vec![];
+        if let Some(url) = &self.url {
+            info.push(("URL", url.clone()));
+        }
+
         let session_info = self.client.info();
         info.push(("Client ID", session_info.zid().await.to_string()));
         for router in session_info.routers_zid().await {

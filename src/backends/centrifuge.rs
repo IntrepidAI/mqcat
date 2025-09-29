@@ -5,9 +5,11 @@ use futures_util::Stream;
 use tokio_centrifuge::client::Client;
 use tokio_centrifuge::config::Config;
 
-use crate::{mqtrait::{Frame, MessageQueue}, utils::format_table};
+use crate::mqtrait::{Frame, MessageQueue};
+use crate::utils::format_table;
 
 struct CentrifugeMQ<const JSON: bool> {
+    url: String,
     client: Client,
 }
 
@@ -19,8 +21,10 @@ impl<const JSON: bool> MessageQueue for CentrifugeMQ<JSON> {
             ("ws://localhost:8000/connection/websocket?format=protobuf", Config::new().use_protobuf())
         };
 
+        let url = addr.unwrap_or(default_addr).to_owned();
+
         let client = Client::new(
-            addr.unwrap_or(default_addr),
+            &url,
             config.with_name(format!("mqcat {}", crate::version::get_version()))
         );
 
@@ -39,11 +43,14 @@ impl<const JSON: bool> MessageQueue for CentrifugeMQ<JSON> {
 
         client.connect().await.map_err(|_| anyhow::Error::msg("failed to connect"))?;
 
-        Ok(Self { client })
+        Ok(Self { url, client })
     }
 
     async fn info(&self) -> anyhow::Result<String> {
         let mut info = vec![];
+        info.push(("URL", self.url.clone()));
+        info.push(("Encoding", if JSON { "JSON" } else { "Protobuf" }.to_owned()));
+
         let server_info = self.client.server_info();
         info.push(("Client ID", server_info.client_id.to_string()));
 

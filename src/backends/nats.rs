@@ -2,20 +2,25 @@ use anyhow::{anyhow, bail};
 use async_nats::{Client, HeaderMap};
 use futures_util::{Stream, StreamExt};
 
-use crate::{mqtrait::{Frame, MessageQueue}, utils::format_table};
+use crate::mqtrait::{Frame, MessageQueue};
+use crate::utils::format_table;
 
 struct NatsMQ {
+    url: String,
     client: Client,
 }
 
 impl MessageQueue for NatsMQ {
     async fn connect(addr: Option<&str>) -> anyhow::Result<Self> {
-        let client = async_nats::connect(addr.unwrap_or("nats://localhost:4222")).await?;
-        Ok(Self { client })
+        let url = addr.unwrap_or("nats://localhost:4222").to_owned();
+        let client = async_nats::connect(&url).await?;
+        Ok(Self { url, client })
     }
 
     async fn info(&self) -> anyhow::Result<String> {
         let mut info = vec![];
+        info.push(("URL", self.url.clone()));
+
         let server_info = self.client.server_info();
         info.push(("Client ID", server_info.client_id.to_string()));
         info.push(("Client IP", server_info.client_ip));
