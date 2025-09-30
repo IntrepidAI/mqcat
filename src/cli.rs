@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::pin::pin;
 use std::time::Duration;
 
@@ -13,8 +13,7 @@ use tokio::sync::mpsc::error::TrySendError;
 use tracing_subscriber::filter;
 use tracing_subscriber::prelude::*;
 
-use crate::mqtrait::Frame;
-use crate::mqtrait::MessageQueue;
+use crate::mqtrait::{Frame, MessageQueue};
 
 #[derive(Parser, Debug)]
 #[command(disable_help_subcommand = true)]
@@ -52,8 +51,8 @@ enum Commands {
     Publish {
         #[arg(help = "channel name")]
         channel: String,
-        #[arg(help = "data to publish")]
-        data: String,
+        #[arg(help = "data to publish (read from stdin if not provided)")]
+        data: Option<String>,
         #[arg(short = 'H', long, help = "add header to the message", value_parser = parse_header)]
         header: Vec<(String, String)>,
         #[arg(long, help = "publish multiple messages", default_value = "1")]
@@ -74,8 +73,8 @@ enum Commands {
     Request {
         #[arg(help = "channel name")]
         channel: String,
-        #[arg(help = "request data")]
-        data: String,
+        #[arg(help = "request data (read from stdin if not provided)")]
+        data: Option<String>,
         #[arg(short = 'H', long, help = "add header to the message", value_parser = parse_header)]
         header: Vec<(String, String)>,
         #[arg(long, help = "publish multiple messages", default_value = "1")]
@@ -256,27 +255,48 @@ async fn print_data(idx: u32, frame: &Frame, translate: &Option<String>) -> anyh
 }
 
 pub async fn run<Q: MessageQueue>(args: impl Iterator<Item = String>) {
+    fn url_or_empty(url: &str) -> Option<&str> {
+        if url.is_empty() {
+            None
+        } else {
+            Some(url)
+        }
+    }
+
+    fn data_or_stdin(data: Option<String>) -> anyhow::Result<Vec<u8>> {
+        if let Some(data) = data {
+            Ok(data.into())
+        } else {
+            log::info!("reading data from stdin...");
+            let mut buffer = Vec::new();
+            std::io::stdin().read_to_end(&mut buffer)?;
+            // log::info!("read {} bytes from stdin", buffer.len());
+            Ok(buffer)
+        }
+    }
+
     init(args, |args: BaseArgs| async move {
         match args.command {
             Some(Commands::Info) => {
-                let mq = Q::connect(if args.url.is_empty() { None } else { Some(&args.url) }).await?;
+                let mq = Q::connect(url_or_empty(&args.url)).await?;
                 let info = mq.info().await?;
                 std::io::stdout().write_all(info.as_bytes())?;
                 std::io::stdout().flush()?;
             }
             Some(Commands::Publish { channel, data, header, count, sleep }) => {
-                let mq = Q::connect(if args.url.is_empty() { None } else { Some(&args.url) }).await?;
+                let mq = Q::connect(url_or_empty(&args.url)).await?;
+                let data = data_or_stdin(data)?;
                 for n in 0..count {
                     if n > 0 {
                         tokio::time::sleep(sleep).await;
                     }
-                    mq.publish(&channel, &header, data.as_bytes()).await?;
+                    mq.publish(&channel, &header, &data).await?;
                     log::info!("published {} bytes to \"{}\"", data.len(), channel);
                 }
             }
             Some(Commands::Subscribe { channel, translate }) => {
                 let mut idx = 0;
-                let mq = Q::connect(if args.url.is_empty() { None } else { Some(&args.url) }).await?;
+                let mq = Q::connect(url_or_empty(&args.url)).await?;
                 let stream = mq.subscribe(&channel);
                 let mut stream = pin!(stream);
                 while let Some(msg) = stream.next().await {
@@ -286,12 +306,13 @@ pub async fn run<Q: MessageQueue>(args: impl Iterator<Item = String>) {
                 }
             }
             Some(Commands::Request { channel, data, header, count, translate }) => {
-                let mq = Q::connect(if args.url.is_empty() { None } else { Some(&args.url) }).await?;
+                let mq = Q::connect(url_or_empty(&args.url)).await?;
+                let data = data_or_stdin(data)?;
                 let mut idx = 0;
                 for _ in 0..count {
                     log::info!("sending request to \"{}\"", channel);
                     let time = std::time::Instant::now();
-                    let frame = mq.request(&channel, &header, data.as_bytes()).await?;
+                    let frame = mq.request(&channel, &header, &data).await?;
                     log::info!("received with rtt {:?}", time.elapsed());
                     idx += 1;
                     print_data(idx, &frame, &translate).await?;
